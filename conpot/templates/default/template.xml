@@ -30,7 +30,16 @@
             </key>
             <key name="sysName">
                 <value type="value">"CP 443-1 EX40"</value>
-            </key>
+	    </key>
+	    <key name="module">
+      		<value type="value">"6eS7 212-1BD30-xXB0"</value>
+	    </key>
+	    <key name="hardware">
+      		<value type="value">"6eS7 212-1BD30-xXB0"</value>
+	    </key>
+            <key name="firmware">
+      		<value type="value">"3.2.6"</value>
+	    </key>
             <key name="sysLocation">
                 <value type="value">"Venus"</value>
             </key>

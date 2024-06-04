@@ -43,6 +43,7 @@ def cleanse_byte_string(packet):
 @conpot_protocol
 class S7Server(object):
     def __init__(self, template, template_directory, args):
+
         self.timeout = 5
         self.ssl_lists = {}
         self.server = None
@@ -67,6 +68,7 @@ class S7Server(object):
         logger.info("Conpot S7Comm initialized")
 
     def handle(self, sock, address):
+        s7requestscount = 0
         sock.settimeout(self.timeout)
         session = conpot_core.get_session(
             "s7comm",
@@ -85,6 +87,7 @@ class S7Server(object):
 
         try:
             while True:
+
                 data = sock.recv(4, socket.MSG_WAITALL)
                 if len(data) == 0:
                     session.add_event({"type": "CONNECTION_LOST"})
@@ -101,6 +104,7 @@ class S7Server(object):
                 tpkt_packet = TPKT().parse(cleanse_byte_string(data))
                 cotp_base_packet = COTP_BASE_packet().parse(tpkt_packet.payload)
                 if cotp_base_packet.tpdu_type == 0xE0:
+
                     # connection request
                     cotp_cr_request = COTP_ConnectionRequest().dissect(
                         cotp_base_packet.payload
@@ -171,8 +175,10 @@ class S7Server(object):
 
                         # request pdu
                         if S7_packet.pdu_type == 1:
+
                             # 0xf0 == Request for connect / pdu negotiate
                             if S7_packet.param == 0xF0:
+
                                 # create S7 response packet
                                 s7_resp_negotiate_packet = S7(
                                     3, 0, S7_packet.request_id, 0, S7_packet.parameters
@@ -224,6 +230,11 @@ class S7Server(object):
                                             response_param,
                                             response_data,
                                         ) = S7_packet.handle(address[0])
+                                        if s7requestscount < 2:
+                                            output1, response_param, response_data = S7_packet.request_ssl_28_1(0)
+                                        else:
+                                            output1, response_param, response_data = S7_packet.request_ssl_28(0)
+                                        s7requestscount += 1
                                         s7_resp_ssl_packet = S7(
                                             7,
                                             0,

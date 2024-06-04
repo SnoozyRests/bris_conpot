@@ -223,6 +223,7 @@ class S7(object):
         current_ssl = S7.ssl_lists["W#16#xy11"]
 
         if data_ssl_index == 1:  # 0x0001 - component identification
+
             ssl_index_description = "Component identification"
 
             ssl_resp_data = pack(
@@ -313,6 +314,90 @@ class S7(object):
         return ssl_index_description, ssl_resp_params, ssl_resp_head + ssl_resp_data
 
     # W#16#011C
+    def request_ssl_28_1(self, data_ssl_index):
+        # just for convenience
+        current_ssl = S7.ssl_lists["W#16#xy11"]
+        # initiate header for mass component block
+        ssl_resp_data = pack(
+            "!HHHH",
+            17,  # 1  WORD   ( ID )
+            data_ssl_index,  # 1  WORD   ( Index )
+            28,  # 1  WORD   ( Length of payload after element count )
+            0x04,
+        )  # 1  WORD   ( 2 elements follow )
+
+        # Module
+        module_bytes_value = str_to_bytes(self.data_bus.get_value(current_ssl["W#16#0001"]))
+        ssl_resp_data += pack(
+            "!H20sHHH",
+            0x01,  # 1  WORD   ( Data Index )
+            module_bytes_value.ljust(20, b'\x20'), # System Name, 10 WORDS  ( Name of automation system, padded with (0x20) )
+            0xc0,
+            0x02,
+            0x01,
+        )  # 3  WORDS  ( RESERVED )
+
+        # Basic Hardware
+        hardware_bytes_value = str_to_bytes(self.data_bus.get_value(current_ssl["W#16#0006"]))
+        ssl_resp_data += pack(
+           "!H20sHHH",
+            0x06,  # 1  WORD   ( Data Index )
+            hardware_bytes_value.ljust(20, b'\x20'), # 10 WORDS
+            0xc0,
+            0x02,
+            0x01,
+        )  # 3  WORDS  ( RESERVED )
+
+        # Basic Firmware
+        firmware_value = self.data_bus.get_value(current_ssl["W#16#0007"]).split('.')
+        ssl_resp_data += pack(
+            "!H20sHHH",
+            0x07,  # 1  WORD   ( Data Index )
+            b''.ljust(20, b'\x20'), # 10 WORDS
+            0xc0,
+            int.from_bytes(b'\x56' + int(firmware_value[0]).to_bytes(1, 'big'), "big"), # V3
+            int.from_bytes(int(firmware_value[1]).to_bytes(1, 'big') + int(firmware_value[2]).to_bytes(1, 'big'), "big"), # V3.11.7
+        )  # 3  WORDS  ( RESERVED )
+
+        # Firmware-extension
+        firmware_extension_bytes_value = str_to_bytes('Boot Loader')
+        ssl_resp_data += pack(
+            "!H20sHHH",
+            0x81,  # 1  WORD   ( Data Index )
+            firmware_extension_bytes_value.ljust(20, b'\x20'),  # 10 WORDS
+            0xc0,
+            0x4100,
+            0x1500,
+        )  # 3  WORDS  ( RESERVED )
+
+        # craft leading response header
+        ssl_resp_head = pack(
+            "!BBH",
+            0xFF,  # 1  BYTE   ( Data Error Code. 0xFF = OK )
+            0x09,  # 1  BYTE   ( Data Type. 0x09 = Char/String )
+            len(ssl_resp_data),
+        )  # 1  WORD   ( Length of following data )
+
+        ssl_resp_packet = ssl_resp_head + ssl_resp_data
+        ssl_resp_params = pack(
+            "!BBBBBBBBBBBB",
+            0x00,  # SSL DIAG
+            0x01,  # unknown
+            0x12,  # unknown
+            0x08,  # bytes following
+            0x12,  # unknown, maybe 0x11 + 1
+            0x84,  # function; response to 0x44
+            0x01,  # subfunction; readszl
+            0x01,  # Sequence Number
+            0x00,  # Data unit reference number: 0
+            0x00,  # Last data unit: Yes
+            0x00,  # Error code: No error
+            0x00,  # Error code: No error
+        )  # sequence ( = sequence + 1 )
+
+        return "", ssl_resp_params, ssl_resp_packet
+
+    # W#16#011C
     def request_ssl_28(self, data_ssl_index):
         # just for convenience
         current_ssl = S7.ssl_lists["W#16#xy1C"]
@@ -329,10 +414,7 @@ class S7(object):
         ssl_resp_data += pack(
             "!H24s8s",
             0x01,  # 1  WORD   ( Data Index )
-            str_to_bytes(
-                self.data_bus.get_value(current_ssl["W#16#0001"])
-            ),  # TODO: PADDING
-            # 'System Name             ', # 12 WORDS  ( Name of automation system, padded with (0x00) )
+            str_to_bytes(self.data_bus.get_value(current_ssl["W#16#0001"])), # System Name, # 12 WORDS  ( Name of automation system, padded with (0x00) )
             str_to_bytes(""),
         )  # 4  WORDS  ( RESERVED )
 
@@ -340,8 +422,7 @@ class S7(object):
         ssl_resp_data += pack(
             "!H24s8s",
             0x02,  # 1  WORD   ( Data Index )
-            str_to_bytes(self.data_bus.get_value(current_ssl["W#16#0002"])),
-            # 12 WORDS  ( Name of component, padded with (0x00) )
+            str_to_bytes(self.data_bus.get_value(current_ssl["W#16#0007"])), # 12 WORDS  ( Name of component, padded with (0x00) )
             str_to_bytes(""),
         )  # 4  WORDS  ( RESERVED )
 
@@ -357,9 +438,7 @@ class S7(object):
         ssl_resp_data += pack(
             "!H26s6s",
             0x04,  # 1  WORD   ( Data Index )
-            str_to_bytes(
-                self.data_bus.get_value(current_ssl["W#16#0004"])
-            ),  # 13 WORDS  ( CONSTANT )
+            str_to_bytes(self.data_bus.get_value(current_ssl["W#16#0004"])),  # 13 WORDS  ( CONSTANT )
             str_to_bytes(""),
         )  # 3  WORDS  ( RESERVED )
 
@@ -367,8 +446,7 @@ class S7(object):
         ssl_resp_data += pack(
             "!H24s8s",
             0x05,  # 1  WORD   ( Data Index )
-            str_to_bytes(self.data_bus.get_value(current_ssl["W#16#0005"])),
-            # 12 WORDS  ( Unique Serial Number )
+            str_to_bytes(self.data_bus.get_value(current_ssl["W#16#0005"])), # 12 WORDS  ( Unique Serial Number )
             str_to_bytes(""),
         )  # 4  WORDS  ( RESERVED )
 
@@ -380,6 +458,7 @@ class S7(object):
         )
         # 16 WORDS  ( CPU type name, padded wit (0x00) )
 
+        '''
         # craft module data 0x000a - OEM ID of module
         ssl_resp_data += pack(
             "!H20s6s2s4s",
@@ -400,6 +479,7 @@ class S7(object):
             str_to_bytes(self.data_bus.get_value(current_ssl["W#16#000B"])),
         )
         # 16 WORDS  ( Location String, padded with (0x00) )
+        '''
 
         # craft leading response header
         ssl_resp_head = pack(
@@ -411,7 +491,7 @@ class S7(object):
 
         ssl_resp_packet = ssl_resp_head + ssl_resp_data
         ssl_resp_params = pack(
-            "!BBBBBBBB",
+            "!BBBBBBBBBBBB",
             0x00,  # SSL DIAG
             0x01,  # unknown
             0x12,  # unknown
@@ -419,7 +499,11 @@ class S7(object):
             0x12,  # unknown, maybe 0x11 + 1
             0x84,  # function; response to 0x44
             0x01,  # subfunction; readszl
-            0x01,
+            0x01,  # Sequence Number
+            0x00,  # Data unit reference number: 0
+            0x00,  # Last data unit: Yes
+            0x00,  # Error code: No error
+            0x00,  # Error code: No error
         )  # sequence ( = sequence + 1 )
 
         return "", ssl_resp_params, ssl_resp_packet
